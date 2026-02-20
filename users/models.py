@@ -1,13 +1,26 @@
+# users/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-# Create your models here.
+
 class CustomUser(AbstractUser):
-    # Add any additional fields you want for your custom user model
-    role = models.CharField(max_length=50, blank=False, null=False)
+    class Roles(models.TextChoices):
+        ADMIN = 'admin', 'Admin'
+        STAFF = 'staff', 'Staff'          # <-- added
+        USER  = 'user',  'User'
+
+    role = models.CharField(
+        max_length=20,
+        choices=Roles.choices,
+        default=Roles.USER,               # default remains 'user'
+    )
     phone_number = models.CharField(max_length=15, blank=True, null=True)
+    email = models.EmailField(unique=True)
+
+    REQUIRED_FIELDS = ['email']
+
     def __str__(self):
         return self.username
+
     class Meta:
         verbose_name = 'Custom User'
-        verbose_name_plural = 'Custom Users'    
-    
+        verbose_name_plural = 'Custom Users'

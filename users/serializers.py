@@ -1,25 +1,35 @@
+# users/serializers.py
 from rest_framework import serializers
-from .models import User 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number'] 
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number']
         read_only_fields = ['id']
-        
+
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, min_length=6)
+
     class Meta:
         model = User
         fields = ['username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 'password']
+
+    def validate_username(self, v):
+        if User.objects.filter(username=v).exists():
+            raise serializers.ValidationError('username taken')
+        return v
+
+    def validate_email(self, v):
+        if v and User.objects.filter(email=v).exists():
+            raise serializers.ValidationError('email taken')
+        return v
+
     def create(self, validated_data):
-        user = User(
-            username=validated_data['username'],
-            email=validated_data['email'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
-            role=validated_data['role'],
-            phone_number=validated_data.get('phone_number', '')
-        )
-        user.set_password(validated_data['password'])
+        password = validated_data.pop('password')
+        user = User(**validated_data)
+        user.set_password(password)
         user.save()
         return user
