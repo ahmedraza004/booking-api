@@ -1,31 +1,63 @@
 # users/serializers.py
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import password_validation
+from rest_framework.validators import UniqueValidator
+from .models import CustomUser
+import re
 
-User = get_user_model()
+User = CustomUser
 
-class UserSerializer(serializers.ModelSerializer):
+PHONE_REGEX = re.compile(r'^\+?[0-9\- ]{7,20}$')
+
+class UserReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number']
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'role', 'username', 'email']  # prevent self-escalation
+
+class UserWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'phone_number']  # users can change these only
+
+    def validate_phone_number(self, v):
+        if v and not PHONE_REGEX.match(v):
+            raise serializers.ValidationError("Invalid phone number format.")
+        return v
 
 class SignupSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
+    # Do not allow client to set role; keep default on model.
+    username = serializers.CharField(
+        max_length=150,
+        validators=[UniqueValidator(queryset=User.objects.all(), lookup='iexact')],
+    )
+    email = serializers.EmailField(
+        validators=[UniqueValidator(queryset=User.objects.all(), lookup='iexact')],
+    )
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 'password']
+        fields = ['username', 'email', 'first_name', 'last_name', 'phone_number', 'password']
 
     def validate_username(self, v):
-        if User.objects.filter(username=v).exists():
-            raise serializers.ValidationError('username taken')
+        v = v.strip().lower()
         return v
 
     def validate_email(self, v):
-        if v and User.objects.filter(email=v).exists():
-            raise serializers.ValidationError('email taken')
+        return v.strip().lower()
+
+    def validate_phone_number(self, v):
+        if v and not PHONE_REGEX.match(v):
+            raise serializers.ValidationError("Invalid phone number format.")
         return v
+
+    def validate(self, attrs):
+        # Use Django’s built-in password validators
+        password = attrs.get('password')
+        user = User(username=attrs.get('username'), email=attrs.get('email'))
+        password_validation.validate_password(password, user=user)
+        return attrs
 
     def create(self, validated_data):
         password = validated_data.pop('password')
